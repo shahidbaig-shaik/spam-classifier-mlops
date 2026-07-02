@@ -66,6 +66,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          # Disable Node.js 20 warning — we don't use Node, this is Python only
+          check-latest: true
 
       # Step 3: Install all dependencies
       - name: Install dependencies
