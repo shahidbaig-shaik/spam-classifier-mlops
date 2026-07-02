@@ -1,0 +1,32 @@
+# Files/directories to EXCLUDE from the Docker build context.
+# This makes builds faster and images smaller.
+
+# Virtual environment (deps are installed fresh in the container)
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Git
+.git/
+.github/
+
+# W&B local logs
+wandb/
+
+# Training data (not needed to serve the model)
+data/
+
+# Notebooks
+notebooks/
+
+# Environment files with secrets
+.env
+
+# OS files
+.DS_Store
+
+# Documentation
+*.md

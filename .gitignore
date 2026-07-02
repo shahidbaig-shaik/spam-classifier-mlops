@@ -1,0 +1,18 @@
+# Environment & secrets
+.env
+venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# W&B local files
+wandb/
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
