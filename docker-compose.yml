@@ -1,26 +1,8 @@
-# =============================================================
-#  DOCKER COMPOSE — Easy way to build & run your container
-# =============================================================
-#
-# Instead of typing long "docker build" and "docker run" commands,
-# you just type: docker compose up --build
-#
-# Think of it as a shortcut that remembers all your settings.
-
 services:
   api:
-    # Build the image using the Dockerfile in current directory
     build: .
-
-    # Map port 8000 on your Mac → port 8000 in the container
-    # Format: HOST_PORT:CONTAINER_PORT
-    # After this, http://localhost:8000 on your Mac hits the container
     ports:
-      - "8000:8000"
-
-    # Environment variables passed into the container
+      - "8000:8000"   # HOST_PORT:CONTAINER_PORT
     environment:
       - PYTHONUNBUFFERED=1
-
-    # Restart the container if it crashes
     restart: unless-stopped

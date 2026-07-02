@@ -1,114 +1,51 @@
-# =============================================================
-#  GITHUB ACTIONS CI/CD WORKFLOW
-# =============================================================
-#
-# WHAT IS GITHUB ACTIONS?
-# -----------------------
-# GitHub Actions is a built-in automation tool on GitHub.
-# It runs "workflows" — sequences of steps — triggered by events
-# like "someone pushed code" or "a pull request was opened".
-#
-# WHY DO WE NEED IT?
-# ------------------
-# Right now you manually run tests and manually deploy.
-# With this workflow, every git push automatically:
-#   1. Runs your 7 tests on GitHub's servers
-#   2. If ALL tests pass → triggers a deploy to Render
-#   3. If ANY test fails → deployment is blocked, you get an email
-#
-# This is called a "CI/CD pipeline":
-#   CI = Continuous Integration  → run tests on every push
-#   CD = Continuous Deployment   → deploy automatically if tests pass
-#
-# WORKFLOW STRUCTURE:
-# -------------------
-# trigger → jobs run in parallel (or in sequence with 'needs')
-#
-#   push to main
-#       │
-#       ▼
-#   ┌─────────┐       ┌──────────┐
-#   │  test   │──────▶│  deploy  │  (only runs if 'test' passes)
-#   └─────────┘       └──────────┘
-
+# CI/CD: run tests on every push/PR; deploy to Render only on main after tests pass.
 
 name: CI/CD Pipeline
 
-# ─── TRIGGER ─────────────────────────────────────────────────
-# When does this workflow run?
 on:
   push:
-    branches: [main]           # Every push to main branch
+    branches: [main]
   pull_request:
-    branches: [main]           # Every pull request targeting main
+    branches: [main]
 
 
-# ─── JOBS ────────────────────────────────────────────────────
 jobs:
 
-  # ============================================================
-  #  JOB 1: TEST
-  #  Run on every push AND pull request.
-  #  This is the "gate" — nothing deploys unless this passes.
-  # ============================================================
   test:
     name: Run Tests
-    runs-on: ubuntu-latest     # GitHub provides a free Ubuntu VM for this
+    runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Check out your code from GitHub
-      # (The VM starts empty — it has no code yet)
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Install Python 3.12
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          # Disable Node.js 20 warning — we don't use Node, this is Python only
           check-latest: true
 
-      # Step 3: Install all dependencies
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
-      # Step 4: Run all 7 tests
-      # -v = verbose (show each test name and pass/fail)
-      # WANDB_MODE=disabled = don't try to connect to W&B during tests
       - name: Run pytest
         run: pytest tests/ -v
         env:
-          WANDB_MODE: disabled
+          WANDB_MODE: disabled   # prevent W&B network calls in CI
 
 
-  # ============================================================
-  #  JOB 2: DEPLOY
-  #  Only runs AFTER test passes, and ONLY on pushes to main.
-  #  (Pull requests run tests but never deploy — safety feature)
-  # ============================================================
   deploy:
     name: Deploy to Render
-    needs: test                # Wait for 'test' job to succeed first
+    needs: test
     runs-on: ubuntu-latest
 
-    # Only deploy on direct pushes to main, not pull requests
+    # PRs run tests but never deploy
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
-      # Trigger Render to pull latest code and redeploy
-      #
-      # HOW THIS WORKS:
-      # Render gives you a special "deploy hook" URL.
-      # When you send a GET request to that URL, Render:
-      #   1. Pulls your latest code from GitHub
-      #   2. Builds the Docker image
-      #   3. Deploys it — replacing the old running container
-      #
-      # RENDER_DEPLOY_HOOK_URL is stored as a GitHub Secret
-      # (Settings → Secrets → Actions) so it's never exposed in code.
+      # RENDER_DEPLOY_HOOK_URL is stored as a GitHub Actions secret
       - name: Trigger Render Deploy
         run: |
           curl -s "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" | cat

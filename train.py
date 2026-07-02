@@ -1,34 +1,6 @@
 """
-PHASE 1 + 2: Train a Spam Classifier with Experiment Tracking
-==============================================================
-This script does 5 things:
-  1. Loads the SMS Spam Collection dataset
-  2. Initializes W&B experiment tracking (Phase 2)
-  3. Trains a text classification pipeline (TF-IDF + Naive Bayes)
-  4. Logs metrics & visualizations to W&B
-  5. Saves the trained model
-
-WHY EXPERIMENT TRACKING?
-------------------------
-Remember when we compared Naive Bayes vs Logistic Regression?
-We had to eyeball the terminal output and mentally compare numbers.
-
-With W&B (Weights & Biases), every training run is automatically:
-  - Logged with its hyperparameters (what settings you used)
-  - Logged with its metrics (how well it performed)
-  - Visualized with charts (confusion matrix, ROC curve, etc.)
-  - Compared side-by-side in a dashboard
-
-Think of it like version control (git) but for experiments.
-Instead of "I think the model with alpha=0.5 was better...",
-you can just open the dashboard and SEE the comparison.
-
-KEY CONCEPTS:
--------------
-- wandb.init():   Starts a new "run" — like opening a new log file
-- wandb.config:   Records your settings (hyperparams, model type, etc.)
-- wandb.log():    Records your results (accuracy, F1, etc.)
-- wandb.finish(): Closes the run and syncs everything to the cloud
+Train a spam classifier pipeline (TF-IDF + Naive Bayes) with W&B experiment tracking.
+Saves the fitted pipeline to disk for serving via FastAPI.
 """
 
 import pandas as pd
@@ -46,15 +18,11 @@ from sklearn.metrics import (
 import joblib
 import os
 
-# ---- Phase 2: Experiment tracking ----
 import wandb
 
 
 def load_data(filepath: str) -> pd.DataFrame:
-    """
-    Load the SMS Spam Collection dataset.
-    Tab-separated, no header: label<TAB>message
-    """
+    """Load the SMS Spam Collection dataset (tab-separated, no header: label<TAB>message)."""
     print("📂 Loading dataset...")
     df = pd.read_csv(filepath, sep='\t', names=['label', 'message'], encoding='latin-1')
     df['label_num'] = df['label'].map({'ham': 0, 'spam': 1})
@@ -69,7 +37,6 @@ def load_data(filepath: str) -> pd.DataFrame:
 def train_model(df: pd.DataFrame) -> tuple:
     """Train the spam classifier pipeline."""
 
-    # --- Split data ---
     print("✂️  Splitting data: 80% train, 20% test...")
     X_train, X_test, y_train, y_test = train_test_split(
         df['message'],
@@ -82,27 +49,18 @@ def train_model(df: pd.DataFrame) -> tuple:
     print(f"   Test samples:     {len(X_test)}")
     print()
 
-    # --- Hyperparameters ---
-    # We define these as variables so we can:
-    #   1. Pass them to the model
-    #   2. Log them to W&B (so we know what settings produced what results)
     hparams = {
         "model_type": "MultinomialNB",
         "vectorizer": "TfidfVectorizer",
-        "stop_words": None,          # CHANGED: Keep ALL words (including "the", "is", etc.)
-        "max_features": 10000,       # CHANGED: 10k features instead of 5k
-        "alpha": 0.1,                # CHANGED: Less smoothing (sharper predictions)
+        "stop_words": None,          # keep all words — removing stop words hurt recall
+        "max_features": 10000,       # 10k features instead of 5k
+        "alpha": 0.1,                # less smoothing for sharper predictions
         "test_size": 0.2,
         "random_state": 42,
     }
 
-    # ---- Phase 2: Log hyperparameters to W&B ----
-    # This records WHAT SETTINGS you used for this run.
-    # Later in the dashboard, you can filter/sort runs by these values.
-    # e.g., "Show me all runs where alpha > 0.5"
     wandb.config.update(hparams)
 
-    # --- Build Pipeline ---
     print("🔧 Building pipeline: TfidfVectorizer → MultinomialNB...")
     pipeline = Pipeline([
         ('tfidf', TfidfVectorizer(
@@ -114,7 +72,6 @@ def train_model(df: pd.DataFrame) -> tuple:
         )),
     ])
 
-    # --- Train ---
     print("🏋️  Training the model...")
     pipeline.fit(X_train, y_train)
     print("   ✅ Training complete!")
@@ -135,7 +92,6 @@ def evaluate_model(pipeline, X_test, y_test) -> dict:
         'recall': recall_score(y_test, predictions),
     }
 
-    # Print to terminal
     print(f"   Accuracy:  {metrics['accuracy']:.4f}  ({metrics['accuracy']*100:.1f}%)")
     print(f"   F1 Score:  {metrics['f1_score']:.4f}")
     print(f"   Precision: {metrics['precision']:.4f}")
@@ -149,17 +105,8 @@ def evaluate_model(pipeline, X_test, y_test) -> dict:
         print(f"   {line}")
     print()
 
-    # ---- Phase 2: Log metrics to W&B ----
-    # This records HOW WELL this run performed.
-    # These show up as charts in your W&B dashboard.
     wandb.log(metrics)
 
-    # ---- Phase 2: Log sklearn diagnostic plots ----
-    # This generates a bunch of useful visualizations automatically:
-    #   - Confusion Matrix: shows where the model gets confused
-    #   - ROC Curve: trade-off between true positives and false positives
-    #   - Precision-Recall Curve: useful for imbalanced datasets (like ours!)
-    #   - Feature Importances: which words matter most
     try:
         y_probas = pipeline.predict_proba(X_test)
         wandb.sklearn.plot_classifier(
@@ -171,7 +118,7 @@ def evaluate_model(pipeline, X_test, y_test) -> dict:
         )
         print("   📈 Logged diagnostic plots to W&B")
     except Exception as e:
-        # If W&B is disabled or plotting fails, that's fine — training still works
+        # non-fatal — plots are nice-to-have, not required
         print(f"   ⚠️  Skipped W&B plots: {e}")
     print()
 
@@ -188,7 +135,7 @@ def save_model(pipeline, filepath: str):
 
 
 def demo_predictions(pipeline):
-    """Run example predictions to see the model in action."""
+    """Run example predictions to sanity-check the trained model."""
     print()
     print("🔮 Demo Predictions:")
     print("=" * 60)
@@ -213,50 +160,27 @@ def demo_predictions(pipeline):
         print()
 
 
-# ============================================================
-#  MAIN: Run the full training pipeline
-# ============================================================
 if __name__ == "__main__":
     print("=" * 60)
     print("  SPAM CLASSIFIER — Training Pipeline")
     print("=" * 60)
     print()
 
-    # ---- Phase 2: Initialize W&B run ----
-    # This starts a new tracked "run" in your W&B project.
-    # - project: groups related runs together (like a repo)
-    # - name:    a human-readable label for THIS specific run
-    #
-    # If WANDB_MODE=disabled (e.g., in CI tests), this is a no-op.
+    # WANDB_MODE=disabled makes this a no-op in CI
     run = wandb.init(
         project="spam-classifier",
         name="nb-experiment-2",
         tags=["naive-bayes", "tfidf", "tuned"],
     )
 
-    # 1. Load data
     data = load_data("data/SMSSpamCollection")
-
-    # 2. Train model
     model, X_train, X_test, y_train, y_test = train_model(data)
-
-    # 3. Evaluate (and log to W&B)
     metrics = evaluate_model(model, X_test, y_test)
-
-    # 4. Save model
     save_model(model, "model/spam_classifier.joblib")
-
-    # 5. Demo predictions
     demo_predictions(model)
 
-    # ---- Phase 2: Finish the W&B run ----
-    # IMPORTANT: Always call this! It flushes all logged data to the cloud.
-    # Without this, your metrics might not show up in the dashboard.
     wandb.finish()
 
     print("=" * 60)
-    print("  ✅ Phase 1+2 Complete! Model trained, tracked, and saved.")
-    print("  📁 Model file: model/spam_classifier.joblib")
-    print("  📊 Check your W&B dashboard for metrics & plots!")
-    print("  🔜 Next: Phase 3 — Serve the model with FastAPI")
+    print("  ✅ Training complete. Model saved to model/spam_classifier.joblib")
     print("=" * 60)
